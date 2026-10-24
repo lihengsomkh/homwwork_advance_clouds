@@ -43,31 +43,60 @@ pipeline {
         stage('Code Lint & Unit Verification') {
             steps {
                 echo "===> [Stage 2/5] Running local unit tests and manifest checks..."
-                sh '''
-                    echo "Checking application files and configuration manifests..."
-                    test -f package.json
-                    test -f server.js
-                    test -f Dockerfile
-                    test -f docker-stack.yml
-                    echo "All core pipeline manifests verified."
-                '''
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            echo "Checking application files and configuration manifests..."
+                            test -f package.json
+                            test -f server.js
+                            test -f Dockerfile
+                            test -f docker-stack.yml
+                            echo "All core pipeline manifests verified."
+                        '''
+                    } else {
+                        powershell '''
+                            Write-Host "Checking application files and configuration manifests..."
+                            if (-not (Test-Path package.json, server.js, Dockerfile, docker-stack.yml)) {
+                                throw "Manifest validation failed."
+                            }
+                            Write-Host "All core pipeline manifests verified successfully."
+                        '''
+                    }
+                }
             }
         }
 
         stage('Build & Tag Docker Image') {
             steps {
                 echo "===> [Stage 3/5] Building lean non-root Docker image..."
-                sh """
-                    echo "Building Docker image: ${IMAGE_URI}:${IMAGE_TAG}"
-                    docker build \
-                        -t ${params.ECR_REPO_NAME}:${IMAGE_TAG} \
-                        -t ${params.ECR_REPO_NAME}:latest \
-                        -t ${IMAGE_URI}:${IMAGE_TAG} \
-                        -t ${IMAGE_URI}:latest .
-                    
-                    echo "Listing generated Docker images:"
-                    docker images | grep "${params.ECR_REPO_NAME}" || true
-                """
+                script {
+                    if (isUnix()) {
+                        sh """
+                            echo "Building Docker image: ${IMAGE_URI}:${IMAGE_TAG}"
+                            docker build \
+                                -t ${params.ECR_REPO_NAME}:${IMAGE_TAG} \
+                                -t ${params.ECR_REPO_NAME}:latest \
+                                -t ${IMAGE_URI}:${IMAGE_TAG} \
+                                -t ${IMAGE_URI}:latest .
+                            
+                            echo "Listing generated Docker images:"
+                            docker images | grep "${params.ECR_REPO_NAME}" || true
+                        """
+                    } else {
+                        powershell """
+                            \$env:PATH = "C:\\Users\\li\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin;\$env:PATH"
+                            Write-Host "Building Docker image: ${IMAGE_URI}:${IMAGE_TAG}"
+                            docker build `
+                                -t ${params.ECR_REPO_NAME}:${IMAGE_TAG} `
+                                -t ${params.ECR_REPO_NAME}:latest `
+                                -t ${IMAGE_URI}:${IMAGE_TAG} `
+                                -t ${IMAGE_URI}:latest .
+                            
+                            Write-Host "Listing generated Docker images:"
+                            docker images | Select-String "${params.ECR_REPO_NAME}"
+                        """
+                    }
+                }
             }
         }
 
@@ -77,16 +106,32 @@ pipeline {
             }
             steps {
                 echo "===> [Stage 4/5] Authenticating to Amazon ECR via AWS CLI..."
-                sh """
-                    echo "Logging in to Amazon ECR registry: ${AWS_REGISTRY} in region ${params.AWS_REGION}..."
-                    aws ecr get-login-password --region ${params.AWS_REGION} | docker login --username AWS --password-stdin ${AWS_REGISTRY}
-                    
-                    echo "Pushing immutable image tag: ${IMAGE_URI}:${IMAGE_TAG}..."
-                    docker push ${IMAGE_URI}:${IMAGE_TAG}
+                script {
+                    if (isUnix()) {
+                        sh """
+                            echo "Logging in to Amazon ECR registry: ${AWS_REGISTRY} in region ${params.AWS_REGION}..."
+                            aws ecr get-login-password --region ${params.AWS_REGION} | docker login --username AWS --password-stdin ${AWS_REGISTRY}
+                            
+                            echo "Pushing immutable image tag: ${IMAGE_URI}:${IMAGE_TAG}..."
+                            docker push ${IMAGE_URI}:${IMAGE_TAG}
 
-                    echo "Pushing latest image tag: ${IMAGE_URI}:latest..."
-                    docker push ${IMAGE_URI}:latest
-                """
+                            echo "Pushing latest image tag: ${IMAGE_URI}:latest..."
+                            docker push ${IMAGE_URI}:latest
+                        """
+                    } else {
+                        powershell """
+                            \$env:PATH = "C:\\Users\\li\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin;C:\\Program Files\\Amazon\\AWSCLIV2;\$env:PATH"
+                            Write-Host "Logging in to Amazon ECR registry: ${AWS_REGISTRY} in region ${params.AWS_REGION}..."
+                            (aws ecr get-login-password --region ${params.AWS_REGION}) | docker login --username AWS --password-stdin ${AWS_REGISTRY}
+                            
+                            Write-Host "Pushing immutable image tag: ${IMAGE_URI}:${IMAGE_TAG}..."
+                            docker push ${IMAGE_URI}:${IMAGE_TAG}
+
+                            Write-Host "Pushing latest image tag: ${IMAGE_URI}:latest..."
+                            docker push ${IMAGE_URI}:latest
+                        """
+                    }
+                }
             }
         }
 
@@ -97,37 +142,48 @@ pipeline {
             steps {
                 echo "===> [Stage 5/5] Deploying stack to AWS Docker Swarm Manager (${params.SWARM_MANAGER_HOST})..."
                 sshagent([params.SSH_CREDENTIAL_ID]) {
-                    sh """
-                        # Ensure remote target directory exists
-                        ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} "mkdir -p ~/deployments/${params.STACK_NAME}"
+                    script {
+                        if (isUnix()) {
+                            sh """
+                                # Ensure remote target directory exists
+                                ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} "mkdir -p ~/deployments/${params.STACK_NAME}"
 
-                        # Securely transfer stack configuration to the Swarm Manager
-                        scp -o StrictHostKeyChecking=no docker-stack.yml ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST}:~/deployments/${params.STACK_NAME}/docker-stack.yml
+                                # Securely transfer stack configuration to the Swarm Manager
+                                scp -o StrictHostKeyChecking=no docker-stack.yml ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST}:~/deployments/${params.STACK_NAME}/docker-stack.yml
 
-                        # Execute rolling update deployment on Swarm Manager with registry authentication
-                        ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} bash -s << 'EOF'
-                            set -e
-                            echo "Authenticating Swarm Manager to Amazon ECR..."
-                            aws ecr get-login-password --region ${params.AWS_REGION} | docker login --username AWS --password-stdin ${AWS_REGISTRY}
+                                # Execute rolling update deployment on Swarm Manager with registry authentication
+                                ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} bash -s << 'EOF'
+                                    set -e
+                                    echo "Authenticating Swarm Manager to Amazon ECR..."
+                                    aws ecr get-login-password --region ${params.AWS_REGION} | docker login --username AWS --password-stdin ${AWS_REGISTRY}
 
-                            cd ~/deployments/${params.STACK_NAME}
+                                    cd ~/deployments/${params.STACK_NAME}
 
-                            echo "Executing Docker Stack Deploy with registry authentication..."
-                            export IMAGE_REPO="${IMAGE_URI}"
-                            export IMAGE_TAG="${IMAGE_TAG}"
-                            export APP_PORT="${params.APP_PORT}"
+                                    echo "Executing Docker Stack Deploy with registry authentication..."
+                                    export IMAGE_REPO="${IMAGE_URI}"
+                                    export IMAGE_TAG="${IMAGE_TAG}"
+                                    export APP_PORT="${params.APP_PORT}"
 
-                            docker stack deploy \
-                                --with-registry-auth \
-                                --compose-file docker-stack.yml \
-                                ${params.STACK_NAME}
+                                    docker stack deploy \
+                                        --with-registry-auth \
+                                        --compose-file docker-stack.yml \
+                                        ${params.STACK_NAME}
 
-                            echo "Verifying cluster convergence and service replica health..."
-                            sleep 5
-                            docker stack services ${params.STACK_NAME}
-                            docker service ps ${params.STACK_NAME}_web-api --no-trunc
+                                    echo "Verifying cluster convergence and service replica health..."
+                                    sleep 5
+                                    docker stack services ${params.STACK_NAME}
+                                    docker service ps ${params.STACK_NAME}_web-api --no-trunc
 EOF
-                    """
+                            """
+                        } else {
+                            powershell """
+                                Write-Host "Connecting to Swarm Manager ${params.SWARM_MANAGER_HOST} via SSH..."
+                                ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} "mkdir -p ~/deployments/${params.STACK_NAME}"
+                                scp -o StrictHostKeyChecking=no docker-stack.yml ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST}:~/deployments/${params.STACK_NAME}/docker-stack.yml
+                                ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} "cd ~/deployments/${params.STACK_NAME} && IMAGE_REPO=${IMAGE_URI} IMAGE_TAG=${IMAGE_TAG} APP_PORT=${params.APP_PORT} docker stack deploy --with-registry-auth -c docker-stack.yml ${params.STACK_NAME} && sleep 5 && docker stack services ${params.STACK_NAME}"
+                            """
+                        }
+                    }
                 }
             }
         }
@@ -136,9 +192,13 @@ EOF
     post {
         always {
             echo "===> Pipeline execution completed. Performing image cleanup on runner..."
-            sh """
-                docker image prune -f --filter "until=24h" || true
-            """
+            script {
+                if (isUnix()) {
+                    sh 'docker image prune -f --filter "until=24h" || true'
+                } else {
+                    powershell '$env:PATH = "C:\\Users\\li\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin;$env:PATH"; docker image prune -f --filter "until=24h"'
+                }
+            }
         }
         success {
             echo "SUCCESS: Pipeline successfully completed build ${BUILD_NUMBER} (${IMAGE_TAG})!"
