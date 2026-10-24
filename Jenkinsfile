@@ -1,23 +1,23 @@
 pipeline {
     agent any
 
-    environment {
-        // AWS and ECR Configurations
-        AWS_REGION          = credentials('aws-region') ?: 'us-east-1'
-        AWS_ACCOUNT_ID      = credentials('aws-account-id') ?: '123456789012'
-        ECR_REPO_NAME       = 'cloud-microservice'
-        ECR_REGISTRY        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        IMAGE_URI           = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
-        
-        // Swarm Cluster Configurations
-        SWARM_MANAGER_HOST  = credentials('swarm-manager-host') ?: '10.0.1.50'
-        SWARM_SSH_USER      = 'ubuntu'
-        SSH_CREDENTIAL_ID   = 'swarm-manager-ssh-key'
-        STACK_NAME          = 'cloud-microservice-stack'
-        APP_PORT            = '80'
+    parameters {
+        string(name: 'AWS_REGION', defaultValue: 'us-east-1', description: 'AWS Region for Amazon ECR')
+        string(name: 'AWS_ACCOUNT_ID', defaultValue: '123456789012', description: '12-digit AWS Account ID for ECR registry')
+        string(name: 'ECR_REPO_NAME', defaultValue: 'cloud-microservice', description: 'Amazon ECR repository name')
+        string(name: 'SWARM_MANAGER_HOST', defaultValue: '10.0.1.50', description: 'Docker Swarm Manager EC2 IP or Hostname')
+        string(name: 'SWARM_SSH_USER', defaultValue: 'ubuntu', description: 'SSH user for Docker Swarm Manager')
+        string(name: 'SSH_CREDENTIAL_ID', defaultValue: 'swarm-manager-ssh-key', description: 'Jenkins SSH Credential ID for Swarm Manager')
+        string(name: 'STACK_NAME', defaultValue: 'cloud-microservice-stack', description: 'Docker Swarm stack name')
+        string(name: 'APP_PORT', defaultValue: '80', description: 'Host ingress port for application')
+        booleanParam(name: 'PUSH_TO_ECR', defaultValue: false, description: 'Authenticate and push image to Amazon ECR')
+        booleanParam(name: 'DEPLOY_TO_SWARM', defaultValue: false, description: 'Deploy stack to remote Docker Swarm Manager via SSH')
+    }
 
-        // Dynamic Tagging: ${BUILD_NUMBER}-${GIT_COMMIT}
-        IMAGE_TAG           = "${BUILD_NUMBER}-${GIT_COMMIT.take(8)}"
+    environment {
+        AWS_REGISTRY = "${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com"
+        IMAGE_URI    = "${AWS_REGISTRY}/${params.ECR_REPO_NAME}"
+        IMAGE_TAG    = "${BUILD_NUMBER}-${GIT_COMMIT ? GIT_COMMIT.take(8) : 'latest'}"
     }
 
     options {
@@ -33,23 +33,23 @@ pipeline {
                 echo "===> [Stage 1/5] Checking out source repository..."
                 checkout scm
                 script {
-                    echo "Git Commit SHA: ${GIT_COMMIT}"
-                    echo "Jenkins Build Number: ${BUILD_NUMBER}"
-                    echo "Assigned Image Tag: ${IMAGE_TAG}"
+                    echo "Git Commit SHA: ${env.GIT_COMMIT ?: 'workspace'}"
+                    echo "Jenkins Build Number: ${env.BUILD_NUMBER}"
+                    echo "Assigned Image Tag: ${env.IMAGE_TAG}"
                 }
             }
         }
 
         stage('Code Lint & Unit Verification') {
             steps {
-                echo "===> [Stage 2/5] Running local unit tests and syntax checks..."
+                echo "===> [Stage 2/5] Running local unit tests and manifest checks..."
                 sh '''
-                    echo "Verifying application files and package integrity..."
+                    echo "Checking application files and configuration manifests..."
                     test -f package.json
                     test -f server.js
                     test -f Dockerfile
                     test -f docker-stack.yml
-                    echo "Application assets verified successfully."
+                    echo "All core pipeline manifests verified."
                 '''
             }
         }
@@ -60,24 +60,26 @@ pipeline {
                 sh """
                     echo "Building Docker image: ${IMAGE_URI}:${IMAGE_TAG}"
                     docker build \
-                        --pull \
-                        --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
-                        --build-arg COMMIT_SHA=${GIT_COMMIT} \
+                        -t ${params.ECR_REPO_NAME}:${IMAGE_TAG} \
+                        -t ${params.ECR_REPO_NAME}:latest \
                         -t ${IMAGE_URI}:${IMAGE_TAG} \
                         -t ${IMAGE_URI}:latest .
                     
-                    echo "Listing generated image metadata:"
-                    docker images | grep "${ECR_REPO_NAME}" || true
+                    echo "Listing generated Docker images:"
+                    docker images | grep "${params.ECR_REPO_NAME}" || true
                 """
             }
         }
 
         stage('Authenticate & Push to Amazon ECR') {
+            when {
+                expression { return params.PUSH_TO_ECR }
+            }
             steps {
                 echo "===> [Stage 4/5] Authenticating to Amazon ECR via AWS CLI..."
                 sh """
-                    echo "Logging in to Amazon ECR registry: ${ECR_REGISTRY} in region ${AWS_REGION}..."
-                    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    echo "Logging in to Amazon ECR registry: ${AWS_REGISTRY} in region ${params.AWS_REGION}..."
+                    aws ecr get-login-password --region ${params.AWS_REGION} | docker login --username AWS --password-stdin ${AWS_REGISTRY}
                     
                     echo "Pushing immutable image tag: ${IMAGE_URI}:${IMAGE_TAG}..."
                     docker push ${IMAGE_URI}:${IMAGE_TAG}
@@ -89,38 +91,41 @@ pipeline {
         }
 
         stage('Deploy to Docker Swarm via SSH') {
+            when {
+                expression { return params.DEPLOY_TO_SWARM }
+            }
             steps {
-                echo "===> [Stage 5/5] Deploying stack to AWS Docker Swarm Manager (${SWARM_MANAGER_HOST})..."
-                sshagent([SSH_CREDENTIAL_ID]) {
+                echo "===> [Stage 5/5] Deploying stack to AWS Docker Swarm Manager (${params.SWARM_MANAGER_HOST})..."
+                sshagent([params.SSH_CREDENTIAL_ID]) {
                     sh """
                         # Ensure remote target directory exists
-                        ssh -o StrictHostKeyChecking=no ${SWARM_SSH_USER}@${SWARM_MANAGER_HOST} "mkdir -p ~/deployments/${STACK_NAME}"
+                        ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} "mkdir -p ~/deployments/${params.STACK_NAME}"
 
                         # Securely transfer stack configuration to the Swarm Manager
-                        scp -o StrictHostKeyChecking=no docker-stack.yml ${SWARM_SSH_USER}@${SWARM_MANAGER_HOST}:~/deployments/${STACK_NAME}/docker-stack.yml
+                        scp -o StrictHostKeyChecking=no docker-stack.yml ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST}:~/deployments/${params.STACK_NAME}/docker-stack.yml
 
                         # Execute rolling update deployment on Swarm Manager with registry authentication
-                        ssh -o StrictHostKeyChecking=no ${SWARM_SSH_USER}@${SWARM_MANAGER_HOST} bash -s << 'EOF'
+                        ssh -o StrictHostKeyChecking=no ${params.SWARM_SSH_USER}@${params.SWARM_MANAGER_HOST} bash -s << 'EOF'
                             set -e
                             echo "Authenticating Swarm Manager to Amazon ECR..."
-                            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                            aws ecr get-login-password --region ${params.AWS_REGION} | docker login --username AWS --password-stdin ${AWS_REGISTRY}
 
-                            cd ~/deployments/${STACK_NAME}
+                            cd ~/deployments/${params.STACK_NAME}
 
                             echo "Executing Docker Stack Deploy with registry authentication..."
                             export IMAGE_REPO="${IMAGE_URI}"
                             export IMAGE_TAG="${IMAGE_TAG}"
-                            export APP_PORT="${APP_PORT}"
+                            export APP_PORT="${params.APP_PORT}"
 
                             docker stack deploy \
                                 --with-registry-auth \
                                 --compose-file docker-stack.yml \
-                                ${STACK_NAME}
+                                ${params.STACK_NAME}
 
                             echo "Verifying cluster convergence and service replica health..."
                             sleep 5
-                            docker stack services ${STACK_NAME}
-                            docker service ps ${STACK_NAME}_web-api --no-trunc
+                            docker stack services ${params.STACK_NAME}
+                            docker service ps ${params.STACK_NAME}_web-api --no-trunc
 EOF
                     """
                 }
@@ -130,17 +135,16 @@ EOF
 
     post {
         always {
-            echo "===> Pipeline execution completed. Performing image cleanup on Jenkins runner..."
+            echo "===> Pipeline execution completed. Performing image cleanup on runner..."
             sh """
-                docker rmi ${IMAGE_URI}:${IMAGE_TAG} || true
                 docker image prune -f --filter "until=24h" || true
             """
         }
         success {
-            echo "SUCCESS: Pipeline successfully deployed build ${BUILD_NUMBER} (${IMAGE_TAG}) to AWS Docker Swarm cluster!"
+            echo "SUCCESS: Pipeline successfully completed build ${BUILD_NUMBER} (${IMAGE_TAG})!"
         }
         failure {
-            echo "FAILURE: Pipeline execution failed during deployment. Review console output for troubleshooting."
+            echo "FAILURE: Pipeline execution failed. Review console output for details."
         }
     }
 }
