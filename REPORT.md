@@ -1,8 +1,9 @@
 # Coursework Report: Automated Cloud CI/CD Pipeline on AWS Docker Swarm
 
 **Course:** Advanced Cloud Computing (MBA IT)  
-**Assignment:** Homework 2 - Automated CI/CD Pipeline with GitHub, Jenkins, Docker, Amazon ECR, and Docker Swarm Cluster  
-**Author:** DevOps & Cloud Engineering Team  
+**Assignment:** Homework 2 & 3 - Automated CI/CD Pipeline, Release Management & Zero-Rebuild Swarm Rollback  
+**Student / Author:** Liheng  
+**GitHub Repository:** [lihengsomkh/homwwork_advance_clouds](https://github.com/lihengsomkh/homwwork_advance_clouds)  
 **Status:** Completed & Validated  
 
 ---

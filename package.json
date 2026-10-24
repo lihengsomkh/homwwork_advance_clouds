@@ -14,7 +14,7 @@
     "jenkins",
     "aws-ecr"
   ],
-  "author": "DevOps Engineering Team",
+  "author": "Liheng",
   "license": "MIT",
   "dependencies": {
     "express": "^4.21.2"

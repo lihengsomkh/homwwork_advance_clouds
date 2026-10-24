@@ -2,6 +2,7 @@
 
 **Project:** AWS Docker Swarm Cloud Microservice  
 **Course:** Advanced Cloud Computing (MBA IT)  
+**Author:** Liheng  
 **Document:** `RELEASING.md` — Release Operations & Rollback Runbook  
 
 ---

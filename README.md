@@ -63,9 +63,7 @@ This repository provides an enterprise-ready, automated CI/CD pipeline implement
     ├── verify-cluster.sh         # Linux audit script for Swarm manager/worker status
     ├── verify-security-groups.sh # AWS Security Group & network port verification
     ├── verify-rolling-update.sh  # Zero-downtime HTTP prober during service update
-    ├── verify-rolling-update.ps1 # Cross-platform PowerShell prober for Windows
-    ├── trigger-jenkins-build.ps1 # Automation helper to trigger Jenkins parameterized builds
-    └── wait-jenkins-build.ps1    # Automation helper to monitor Jenkins build runs
+    └── verify-rolling-update.ps1 # Cross-platform PowerShell prober for Windows
 ```
 
 ---
