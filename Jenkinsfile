@@ -27,7 +27,7 @@ pipeline {
     environment {
         AWS_REGISTRY   = "${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com"
         IMAGE_URI      = "${AWS_REGISTRY}/${params.ECR_REPO_NAME}"
-        TARGET_VERSION = 'v1.0.0' // Dynamically resolved in Stage 1
+        TARGET_VERSION = "${params.VERSION}"
     }
 
     options {
@@ -312,7 +312,7 @@ EOF
                         powershell """
                             Start-Sleep -Seconds 3
                             try {
-                                \$res = Invoke-RestMethod -Uri "http://localhost:8000/" -TimeoutSec 3
+                                \$res = Invoke-RestMethod -Uri "http://localhost:8000/api/v1/info" -TimeoutSec 3
                                 Write-Host "Active Version responding on Swarm: \$(\$res.version)"
                             } catch {
                                 Write-Host "Probe complete."
