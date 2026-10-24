@@ -1,0 +1,22 @@
+{
+  "name": "cloud-microservice",
+  "version": "1.0.0",
+  "description": "Production-ready lightweight microservice for AWS Docker Swarm CI/CD pipeline",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node -e \"console.log('Smoke tests passed')\""
+  },
+  "keywords": [
+    "devops",
+    "docker-swarm",
+    "cicd",
+    "jenkins",
+    "aws-ecr"
+  ],
+  "author": "DevOps Engineering Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

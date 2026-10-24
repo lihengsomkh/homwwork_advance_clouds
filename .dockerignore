@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+Dockerfile
+.dockerignore
+.git
+.gitignore
+.github
+*.md
+scripts
+tests
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db

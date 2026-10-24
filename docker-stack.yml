@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  web-api:
+    image: ${IMAGE_REPO}:${IMAGE_TAG}
+    ports:
+      - target: 3000
+        published: ${APP_PORT:-80}
+        protocol: tcp
+        mode: ingress
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - APP_VERSION=${IMAGE_TAG:-1.0.0}
+    networks:
+      - swarm-overlay-net
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 15s
+        max_failure_ratio: 0.1
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+        monitor: 15s
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  swarm-overlay-net:
+    driver: overlay
+    attachable: true
