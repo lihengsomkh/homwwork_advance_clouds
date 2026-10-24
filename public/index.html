@@ -309,6 +309,7 @@
       <div class="status-pill">
         <div class="pulse-dot"></div>
         <span>SWARM MESH ACTIVE</span>
+        <span id="releaseVersionBadge" class="badge badge-info" style="margin-left:0.6rem; font-size:0.75rem;">Release v1.0.0</span>
       </div>
     </header>
 
@@ -375,6 +376,10 @@
         <div class="card-header">
           <div class="card-icon icon-jenkins">⚙️</div>
           <div class="card-title">CI/CD Pipeline Details</div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Release Version</span>
+          <span class="metric-value badge badge-info" id="liveVersion">v1.0.0</span>
         </div>
         <div class="metric-row">
           <span class="metric-label">Automation Engine</span>
@@ -466,6 +471,12 @@
           const data = await res.json();
           if (data.containerId) {
             document.getElementById('replicaId').textContent = data.containerId.substring(0, 12);
+          }
+          if (data.version) {
+            const vBadge = document.getElementById('releaseVersionBadge');
+            const vLive = document.getElementById('liveVersion');
+            if (vBadge) vBadge.textContent = 'Release ' + data.version;
+            if (vLive) vLive.textContent = data.version;
           }
         }
 

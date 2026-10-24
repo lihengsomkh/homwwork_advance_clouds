@@ -23,6 +23,7 @@ pids
 .env.development.local
 .env.test.local
 .env.production.local
+cookies.txt
 *.pem
 *.key
 *.crt

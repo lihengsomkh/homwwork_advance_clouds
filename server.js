@@ -34,9 +34,9 @@ app.get('/dashboard', (req, res) => {
 app.get('/', (req, res) => {
   const acceptsHtml = req.accepts('html');
   const userAgent = req.get('user-agent') || '';
-  const isCurl = userAgent.toLowerCase().includes('curl');
+  const wantsJson = req.query.format === 'json' || req.headers.accept === 'application/json' || isCurl || userAgent.toLowerCase().includes('powershell');
 
-  if (acceptsHtml && !isCurl) {
+  if (acceptsHtml && !wantsJson) {
     return res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
 
@@ -62,6 +62,7 @@ app.get('/health', (req, res) => {
   const memory = process.memoryUsage();
   res.status(200).json({
     status: 'healthy',
+    version: APP_VERSION,
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     memoryUsageMb: {
@@ -76,6 +77,7 @@ app.get('/health', (req, res) => {
 app.get('/api/v1/info', (req, res) => {
   res.status(200).json({
     application: 'Automated CI/CD Microservice',
+    version: APP_VERSION,
     clusterEngine: 'Docker Swarm',
     cloudProvider: 'Amazon Web Services (AWS)',
     containerId: os.hostname(),
