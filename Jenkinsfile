@@ -43,19 +43,37 @@ pipeline {
                 echo "===> [Stage 1/7] Checking out repository and resolving release version..."
                 checkout scm
                 script {
-                    // Extract version tag if triggered by Git tag refspec
+                    // Priority 1: User-specified parameter VERSION
+                    // Priority 2: Webhook/SCM detected Git tag
                     def gitTag = env.TAG_NAME ?: env.GIT_TAG_NAME ?: ''
                     if (!gitTag && env.GIT_BRANCH && env.GIT_BRANCH.contains('tags/')) {
                         gitTag = env.GIT_BRANCH.substring(env.GIT_BRANCH.lastIndexOf('/') + 1)
                     }
 
-                    // Resolve target version: prefer Git tag if present, else parameter
-                    if (gitTag && params.ACTION == 'deploy') {
+                    if (params.VERSION && params.VERSION.trim()) {
+                        env.TARGET_VERSION = params.VERSION.trim()
+                        echo "Using specified target version: ${env.TARGET_VERSION}"
+                    } else if (gitTag) {
                         env.TARGET_VERSION = gitTag
                         echo "Resolved release version from Git tag: ${env.TARGET_VERSION}"
                     } else {
-                        env.TARGET_VERSION = params.VERSION.trim()
-                        echo "Using specified target version: ${env.TARGET_VERSION}"
+                        env.TARGET_VERSION = 'v1.0.0'
+                    }
+
+                    // In deploy mode, checkout the exact tag ref if it exists locally or remotely
+                    if (params.ACTION == 'deploy') {
+                        if (isUnix()) {
+                            sh """
+                                git fetch --tags origin || true
+                                git checkout tags/${env.TARGET_VERSION} || true
+                            """
+                        } else {
+                            powershell """
+                                \$env:PATH = "C:\\Program Files\\Git\\cmd;\$env:PATH"
+                                git fetch --tags origin
+                                git checkout tags/${env.TARGET_VERSION}
+                            """
+                        }
                     }
 
                     // Strict Semantic Versioning validation: vMAJOR.MINOR.PATCH
