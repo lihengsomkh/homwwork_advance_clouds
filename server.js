@@ -12,6 +12,7 @@ const ENVIRONMENT = process.env.NODE_ENV || 'production';
 // Middleware for basic logging and request timing
 app.use((req, res, next) => {
   const start = Date.now();
+  res.setHeader('X-Release-Version', APP_VERSION);
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
