@@ -22,8 +22,9 @@ COPY package.json ./
 RUN npm install --omit=dev --ignore-scripts && \
     npm cache clean --force
 
-# Copy application source code
+# Copy application source code and public assets
 COPY --chown=node:node server.js ./
+COPY --chown=node:node public ./public
 
 # Assign directory ownership to unprivileged non-root user 'node' (UID/GID 1000)
 RUN chown -R node:node /usr/src/app

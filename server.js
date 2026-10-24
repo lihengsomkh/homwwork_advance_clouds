@@ -2,11 +2,12 @@
 
 const express = require('express');
 const os = require('os');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const APP_VERSION = process.env.APP_VERSION || '1.0.0';
-const ENVIRONMENT = process.env.NODE_ENV || 'development';
+const ENVIRONMENT = process.env.NODE_ENV || 'production';
 
 // Middleware for basic logging and request timing
 app.use((req, res, next) => {
@@ -21,8 +22,24 @@ app.use((req, res, next) => {
 // JSON body parser
 app.use(express.json());
 
-// Root endpoint: displays service information and replica container details
+// Serve static assets from public/ directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Explicit Dashboard route
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Root endpoint: displays interactive web dashboard for browsers, JSON for curl / automated tests
 app.get('/', (req, res) => {
+  const acceptsHtml = req.accepts('html');
+  const userAgent = req.get('user-agent') || '';
+  const isCurl = userAgent.toLowerCase().includes('curl');
+
+  if (acceptsHtml && !isCurl) {
+    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  }
+
   res.status(200).json({
     status: 'success',
     service: 'cloud-microservice',

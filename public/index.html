@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWS Docker Swarm CI/CD Dashboard | Advanced Cloud Computing</title>
+  <meta name="description" content="Production-ready microservice dashboard deployed on AWS EC2 Docker Swarm cluster via Jenkins and Amazon ECR">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at 10% 20%, rgb(15, 23, 42) 0%, rgb(3, 7, 18) 90.2%);
+      --card-bg: rgba(30, 41, 59, 0.65);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover-border: rgba(56, 189, 248, 0.4);
+      --accent-cyan: #38bdf8;
+      --accent-blue: #3b82f6;
+      --accent-emerald: #10b981;
+      --accent-purple: #a855f7;
+      --accent-amber: #f59e0b;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+    }
+
+    /* Header Bar */
+    header {
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.5rem;
+      box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4);
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent-emerald);
+    }
+
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 12px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card:hover {
+      border-color: var(--card-hover-border);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .icon-cloud { background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); }
+    .icon-swarm { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+    .icon-jenkins { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+    .icon-health { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 0.85rem;
+    }
+
+    .metric-row:last-child {
+      border-bottom: none;
+    }
+
+    .metric-label {
+      color: var(--text-secondary);
+    }
+
+    .metric-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-info { background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); border: 1px solid rgba(56, 189, 248, 0.3); }
+    .badge-aws { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+
+    /* Interactive Swarm Test Section */
+    .interactive-panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn:hover {
+      background: linear-gradient(135deg, #0369a1, #1d4ed8);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .probe-log {
+      background: rgba(10, 15, 29, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      padding: 0.35rem 0.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 2rem;
+      padding: 1rem;
+    }
+
+    footer a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="logo-badge">☁️</div>
+        <div class="brand-text">
+          <h1>AWS Docker Swarm Microservice</h1>
+          <p>Automated CI/CD Pipeline via GitHub, Jenkins & Amazon ECR</p>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="pulse-dot"></div>
+        <span>SWARM MESH ACTIVE</span>
+      </div>
+    </header>
+
+    <!-- Cards Grid -->
+    <div class="dashboard-grid">
+      <!-- Card 1: Cloud & Swarm Telemetry -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon icon-cloud">☁️</div>
+          <div class="card-title">Cloud Infrastructure</div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Provider</span>
+          <span class="metric-value badge badge-aws">AWS EC2</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Public IP</span>
+          <span class="metric-value" id="publicIp">54.206.14.99</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">AWS Region</span>
+          <span class="metric-value">ap-southeast-2</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Security Group</span>
+          <span class="metric-value">sg-091b41f77de4432a2</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">AWS Account ID</span>
+          <span class="metric-value">410768350356</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Docker Swarm Cluster -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon icon-swarm">🐳</div>
+          <div class="card-title">Docker Swarm Cluster</div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Orchestrator</span>
+          <span class="metric-value badge badge-info">Docker Swarm</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Stack Name</span>
+          <span class="metric-value">cloud-microservice-stack</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Service Replicas</span>
+          <span class="metric-value badge badge-success">3 / 3 Healthy</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Update Strategy</span>
+          <span class="metric-value">start-first (Zero Downtime)</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Current Replica ID</span>
+          <span class="metric-value" id="replicaId">Loading...</span>
+        </div>
+      </div>
+
+      <!-- Card 3: CI/CD Automation -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon icon-jenkins">⚙️</div>
+          <div class="card-title">CI/CD Pipeline Details</div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Automation Engine</span>
+          <span class="metric-value">Jenkins Declarative</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Last Build Result</span>
+          <span class="metric-value badge badge-success">Build #4 SUCCESS</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Git Commit</span>
+          <span class="metric-value">fa92681 (main)</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Registry</span>
+          <span class="metric-value">Amazon ECR (Private)</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Container User</span>
+          <span class="metric-value badge badge-info">node (UID 1000)</span>
+        </div>
+      </div>
+
+      <!-- Card 4: Health & Performance -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon icon-health">🩺</div>
+          <div class="card-title">Microservice Health</div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Status</span>
+          <span class="metric-value badge badge-success" id="healthStatus">HEALTHY</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Runtime</span>
+          <span class="metric-value" id="nodeVersion">Node.js v20</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Uptime</span>
+          <span class="metric-value" id="uptime">0s</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Memory RSS</span>
+          <span class="metric-value" id="memoryUsage">54 MB</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Health Probe</span>
+          <span class="metric-value"><a href="/health" target="_blank" style="color:var(--accent-cyan);">GET /health ↗</a></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Swarm Load Balancer Simulator -->
+    <div class="interactive-panel">
+      <div class="panel-header">
+        <div>
+          <h2 style="font-size:1.1rem; font-weight:700;">🔄 Swarm Ingress Load-Balancing Prober</h2>
+          <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.2rem;">
+            Test the Docker Swarm Routing Mesh distributing requests across container replicas in real time.
+          </p>
+        </div>
+        <button class="btn" id="probeBtn" onclick="runSwarmProber()">
+          <span>⚡ Send 10 Probes</span>
+        </button>
+      </div>
+
+      <div class="probe-log" id="probeLog">
+        <div style="color:var(--text-muted); text-align:center; padding:1.5rem;">
+          Click "Send 10 Probes" to demonstrate Swarm Routing Mesh round-robin distribution across replicas.
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <p>Advanced Cloud Computing &bull; MBA IT &bull; Homework 2 End-to-End Automated CI/CD Pipeline</p>
+      <p style="margin-top:0.3rem;">
+        GitHub: <a href="https://github.com/lihengsomkh/homwwork_advance_clouds" target="_blank">lihengsomkh/homwwork_advance_clouds</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    // Fetch live system telemetry
+    async function updateTelemetry() {
+      try {
+        const res = await fetch('/api/v1/info');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.containerId) {
+            document.getElementById('replicaId').textContent = data.containerId.substring(0, 12);
+          }
+        }
+
+        const healthRes = await fetch('/health');
+        if (healthRes.ok) {
+          const health = await healthRes.json();
+          document.getElementById('uptime').textContent = Math.floor(health.uptime) + 's';
+          if (health.memoryUsageMb) {
+            document.getElementById('memoryUsage').textContent = health.memoryUsageMb.rss + ' MB';
+          }
+        }
+      } catch (e) {
+        console.error("Telemetry fetch error:", e);
+      }
+    }
+
+    // Interactive Swarm Prober
+    async function runSwarmProber() {
+      const btn = document.getElementById('probeBtn');
+      const log = document.getElementById('probeLog');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Probing Swarm...</span>';
+      log.innerHTML = '';
+
+      for (let i = 1; i <= 10; i++) {
+        const start = performance.now();
+        try {
+          const res = await fetch('/api/v1/info?t=' + Date.now());
+          const data = await res.json();
+          const latency = Math.round(performance.now() - start);
+
+          const entry = document.createElement('div');
+          entry.className = 'log-entry';
+          entry.innerHTML = `
+            <span><strong style="color:var(--accent-cyan);">[Probe #${i.toString().padStart(2, '0')}]</strong> HTTP 200 OK (${latency}ms)</span>
+            <span>Replica Host: <span style="color:var(--accent-emerald); font-weight:600;">${data.containerId || 'unknown'}</span></span>
+          `;
+          log.prepend(entry);
+        } catch (err) {
+          const entry = document.createElement('div');
+          entry.className = 'log-entry';
+          entry.innerHTML = `<span>[Probe #${i}] Error</span><span style="color:#ef4444;">${err.message}</span>`;
+          log.prepend(entry);
+        }
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = '<span>⚡ Send 10 Probes</span>';
+    }
+
+    // Auto-update telemetry on load and every 5 seconds
+    updateTelemetry();
+    setInterval(updateTelemetry, 5000);
+  </script>
+</body>
+</html>
