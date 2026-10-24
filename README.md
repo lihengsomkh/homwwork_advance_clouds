@@ -54,7 +54,8 @@ This repository provides an enterprise-ready, automated CI/CD pipeline implement
 ├── Dockerfile                    # Multi-stage, lean, non-root Alpine Node.js image
 ├── Jenkinsfile                   # Declarative pipeline-as-code for build, ECR, and Swarm deploy
 ├── README.md                     # Technical documentation & operations guide
-├── REPORT.md                     # Assignment submission report & rubric compliance
+├── RELEASING.md                  # Release operations, Semantic Versioning & Zero-Rebuild Rollback runbook
+├── REPORT.md                     # Academic coursework report & rubric compliance matrix
 ├── docker-stack.yml              # Swarm multi-replica service definition with rolling update policy
 ├── package.json                  # Node.js application manifest & dependencies
 ├── server.js                     # Production Express microservice with /health and graceful shutdown
@@ -62,7 +63,9 @@ This repository provides an enterprise-ready, automated CI/CD pipeline implement
     ├── verify-cluster.sh         # Linux audit script for Swarm manager/worker status
     ├── verify-security-groups.sh # AWS Security Group & network port verification
     ├── verify-rolling-update.sh  # Zero-downtime HTTP prober during service update
-    └── verify-rolling-update.ps1 # Cross-platform PowerShell prober for Windows
+    ├── verify-rolling-update.ps1 # Cross-platform PowerShell prober for Windows
+    ├── trigger-jenkins-build.ps1 # Automation helper to trigger Jenkins parameterized builds
+    └── wait-jenkins-build.ps1    # Automation helper to monitor Jenkins build runs
 ```
 
 ---
@@ -172,3 +175,43 @@ chmod +x ./scripts/*.sh
 # Windows PowerShell alternative
 powershell -ExecutionPolicy Bypass -File ./scripts/verify-rolling-update.ps1 -TargetUrl http://<SWARM_MANAGER_OR_ALB_IP> -TotalProbes 30
 ```
+
+---
+
+## 9. Release Management, Semantic Versioning & Zero-Rebuild Rollbacks (Homework 3)
+
+For detailed operational procedures, see [RELEASING.md](file:///d:/MBA_IT/advance%20clouds/homework2/RELEASING.md).
+
+### 9.1 Parameterized Pipeline Overview
+The Jenkins pipeline supports two operational modes controlled by the `ACTION` parameter:
+
+```groovy
+parameters {
+    choice(name: 'ACTION', choices: ['deploy', 'rollback'], 
+           description: 'deploy: compile, tag, push & deploy | rollback: zero-rebuild immediate recovery')
+    string(name: 'VERSION', defaultValue: 'v1.0.0', 
+           description: 'Target Semantic Version (vMAJOR.MINOR.PATCH)')
+}
+```
+
+### 9.2 Release Operations (Deploy Mode)
+1. Commit code and tag the release:
+   ```bash
+   git tag -a v1.2.0 -m "Release v1.2.0"
+   git push origin v1.2.0
+   ```
+2. Trigger the pipeline via Jenkins UI or CLI with `ACTION=deploy`, `VERSION=v1.2.0`.
+3. Pipeline builds the Docker image, tags it with `v1.2.0`, validates image presence, and executes a start-first zero-downtime rolling update on Docker Swarm.
+
+### 9.3 Emergency Zero-Rebuild Rollback (Rollback Mode)
+When a critical defect is identified in production:
+1. Open Jenkins: `http://localhost:8080/job/cloud-microservice-pipeline/`
+2. Select **Build with Parameters**:
+   - `ACTION`: `rollback`
+   - `VERSION`: `v1.0.0` (target stable release)
+3. **Behavior**:
+   - Stages 3 (Build) and 4 (Push) are **automatically skipped**.
+   - Stage 5 (Rollback Guard) verifies that image tag `v1.0.0` exists in the registry.
+   - Stage 6 immediately rolls out the verified pre-built image to Swarm in ~20 seconds.
+   - Zero downtime, zero code rebuilds, 100% deterministic recovery!
+

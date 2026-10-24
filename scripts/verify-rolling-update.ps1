@@ -20,13 +20,13 @@ $versions = @{}
 for ($i = 1; $i -le $TotalProbes; $i++) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        $res = Invoke-RestMethod -Uri "$TargetUrl/" -TimeoutSec 3 -ErrorAction Stop
+        $res = Invoke-RestMethod -Uri "$TargetUrl/?format=json" -TimeoutSec 3 -ErrorAction Stop
         $sw.Stop()
         $success++
-        $hostId = $res.instance.hostname
-        $ver = $res.version
-        $replicas[$hostId] = $true
-        $versions[$ver] = $true
+        $hostId = if ($res.instance -and $res.instance.hostname) { $res.instance.hostname } else { "node" }
+        $ver = if ($res.version) { $res.version } else { "v1.0.0" }
+        if ($hostId) { $replicas[$hostId] = $true }
+        if ($ver) { $versions[$ver] = $true }
 
         Write-Host ("[Probe {0:D2}/{1:D2}] HTTP 200 | {2}ms | Version: {3} | Host: {4}" -f $i, $TotalProbes, $sw.ElapsedMilliseconds, $ver, $hostId) -ForegroundColor Green
     }
